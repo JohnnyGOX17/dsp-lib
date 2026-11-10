@@ -40,6 +40,30 @@ In this way:
 - One Vivado entry point as `just synth <block>` reads `hdl/<block>/synth.toml` and runs the shared Tcl, so every block has the same calling convention (also what Claude Code uses). Note Vivado is local only, CI runs the Verilator/cocotb, pytest and cargo jobs. `just synth` is a manual or self-hosted step.
 - Block discovery via `just test-hdl` globbing `hdl/*/files.f`, so adding a block needs no registration.
 
+## Prerequisites
+
+System tools, installed once per machine ([Vivado](https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vivado.html) is optional and only needed for `just synth`; it is a manual install and not supported on macOS):
+
+| Tool | Used for | macOS | Linux |
+| --- | --- | --- | --- |
+| [just](https://just.systems) | task runner | `brew install just` | `apt install just` / `cargo install just` |
+| [uv](https://docs.astral.sh/uv/) | Python + deps | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| [rustup](https://rustup.rs) | Rust toolchain | `brew install rustup` or the rustup.rs script | rustup.rs script |
+| [Verilator](https://www.veripool.org/verilator/) (5.x) | HDL simulation | `brew install verilator` | build from source if the distro package is older than 5.x |
+| [Verible](https://github.com/chipsalliance/verible) | SV lint/format | [release binaries](https://github.com/chipsalliance/verible/releases) | [release binaries](https://github.com/chipsalliance/verible/releases) |
+
+`just doctor` checks that these are on your `PATH`.
+
+**NOTE:** Verilator calls `python3` while building cocotb sims, so always run simulations through `uv run` (or `just`) so the project's Python is first on `PATH`.
+
+## Setup
+
+```
+just setup
+```
+
+Runs `just doctor`, then `uv sync` (**NOTE:** Python 3.13 venv pinned in `.python-version` because `cocotb` does not yet support Python 3.15+) and installs the `clippy` and `rustfmt` Rust components. It is safe to rerun.
+
 ## ToDo
 
 - [ ] Have Xilinx Vivado toolchain accessible/scriptable by Claude Code to verify synthesis, mapping (e.g. proper DSP48 inference) and resource utilization using a common calling convention per block.
