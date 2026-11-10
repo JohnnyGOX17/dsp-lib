@@ -14,3 +14,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["python/src/dsplib"]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests", "hdl"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"

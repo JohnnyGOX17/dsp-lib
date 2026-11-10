@@ -64,6 +64,21 @@ just setup
 
 Runs `just doctor`, then `uv sync` (**NOTE:** Python 3.13 venv pinned in `.python-version` because `cocotb` does not yet support Python 3.15+) and installs the `clippy` and `rustfmt` Rust components. It is safe to rerun.
 
+## Develop & Test
+
+```
+just test-py                  # Python model tests (python/tests)
+just test-hdl                 # every HDL testbench; `just test-hdl <block>` for one block
+PLOT=1 just test-hdl <block>  # ...and open time/frequency plots of what the testbench captured
+just plot <block>             # replay the last run's plots without re-simulating
+```
+
+Each DSP block follows the pattern:
+- `python/src/dsplib/<block>.py` is a bit-exact model; `python/tests/test_<block>_model.py` checks it against ideal math (the `_model` suffix keeps it from clashing with the `cocotb` test module name).
+- `hdl/<block>/test_<block>.py` holds the `@cocotb.test()` coroutines (not named `test_*`, so pytest skips them) and one pytest function that calls `dsplib.sim.run(block, parameters, tag)` per parameter set. Each set builds into `build/<block>/<tag>/`, and the cocotb tests read the parameters back with `sim.dut_params()`.
+- Testbenches compare DUT output bit-exactly against the model, check timing (latency, gaps), and check quality metrics (e.g. SFDR via `dsplib.spectral`) against limits from theory.
+- Call `dsplib.plot.save_capture(name, x, **meta)` *before* asserting, so a failing run still leaves something to plot. With `PLOT=1` the plots open after the sim, including on failure, though they never open when `CI` is set.
+
 ## ToDo
 
 - [ ] Have Xilinx Vivado toolchain accessible/scriptable by Claude Code to verify synthesis, mapping (e.g. proper DSP48 inference) and resource utilization using a common calling convention per block.
