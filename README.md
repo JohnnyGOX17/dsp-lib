@@ -1,6 +1,6 @@
 # dsp-lib
 
-Library of DSP blocks for rapid FPGA and SDR use.
+Library of DSP blocks for rapid FPGA and SDR use. A set of performant FPGA and SW primitives, along with associated modeling and algorithmic verification code, for allowing AI tools to quickly create, modify, and deploy real-time waveforms and SDR systems for applications like: novel communication links that adapt to their environment, hybrid RF sensing modalities, etc.
 
 ## Repo Layout
 
