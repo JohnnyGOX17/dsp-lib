@@ -34,7 +34,7 @@ Read as a signed $`N`$-bit number, $`\Delta\phi`$ gives negative frequencies too
 **Quarter-wave ROM.** The ROM stores one quadrant of a sine, sampled at half-LSB offsets with amplitude $`A = 2^{W-1} - 1`$:
 
 ```math
-R[k] = \operatorname{round}\!\left(A \sin\!\left(\frac{\pi}{2} \cdot \frac{k + \tfrac{1}{2}}{2^{M}}\right)\right),
+R[k] = \mathrm{round}\!\left(A \sin\!\left(\frac{\pi}{2} \cdot \frac{k + \tfrac{1}{2}}{2^{M}}\right)\right),
 \qquad k = 0, \dots, 2^M - 1
 ```
 
