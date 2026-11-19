@@ -10,13 +10,11 @@ builds into build/<block>/<tag>/, which also holds that run's results and plot c
 
 import json
 import os
-from pathlib import Path
 
 from cocotb_tools.runner import get_runner
 
 from dsplib import plot
-
-REPO = Path(__file__).resolve().parents[3]
+from dsplib.blocks import REPO, sources
 
 
 def run(
@@ -26,15 +24,13 @@ def run(
     toplevel: str | None = None,
 ) -> None:
     parameters = parameters or {}
-    files_f = REPO / "hdl" / block / "files.f"
-    sources = [REPO / s for s in files_f.read_text().split() if not s.startswith("#")]
     build_dir = REPO / "build" / block / tag
     for old in build_dir.glob("*.npz"):
         old.unlink()
 
     runner = get_runner("verilator")
     runner.build(
-        sources=sources,
+        sources=sources(block),
         hdl_toplevel=toplevel or block,
         parameters=parameters,
         build_dir=build_dir,

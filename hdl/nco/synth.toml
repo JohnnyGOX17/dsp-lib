@@ -1,0 +1,21 @@
+# Vivado out-of-context synth + place & route for `just synth nco`; results go into README.md.
+# Schema: python/src/dsplib/synth.py. Part defaults to xc7z010clg225-1 (ADALM PLUTO).
+clock = "clk"
+period_ns = 4.0 # 250 MHz: covers the AD936x LVDS data clock (<= 245.76 MHz)
+
+# Every config: the quarter-wave ROM is one dual-port RAMB18 and nothing needs a DSP48.
+# LUT/FF ceilings are ~20% over the Vivado 2025.1 baseline, to absorb tool-version drift.
+[expect]
+RAMB18E1 = 1
+RAMB36E1 = 0
+DSP48E1 = 0
+
+[[config]]
+tag = "dither0" # same tags as test_nco.py
+parameters = { PHASE_W = 32, ADDR_W = 10, OUT_W = 16, DITHER = 0 }
+expect = { lut = { max = 90 }, ff = { max = 135 } }
+
+[[config]]
+tag = "dither1"
+parameters = { PHASE_W = 32, ADDR_W = 10, OUT_W = 16, DITHER = 1 }
+expect = { lut = { max = 115 }, ff = { max = 175 } }

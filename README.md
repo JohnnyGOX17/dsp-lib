@@ -18,7 +18,7 @@ dsp-lib/
 ├── rust-toolchain.toml
 ├── .github/workflows/
 ├── python/
-│   ├── src/dsplib/          # models (fir.py, nco.py), fixed-point utils, cocotb helpers, plotting
+│   ├── src/dsplib/          # models (fir.py, nco.py), fixed-point utils, sim/synth runners, plotting
 │   └── tests/               # pure-Python model tests (no HDL)
 ├── hdl/
 │   ├── common/              # shared packages, primitives, utility modules
@@ -26,9 +26,10 @@ dsp-lib/
 │       ├── <block>.sv
 │       ├── files.f          # filelist, shared by Verilator, cocotb and Vivado
 │       ├── test_<block>.py  # cocotb test, imports dsplib
-│       └── synth.toml       # expectations: DSP48 count, max LUTs, target part, Fmax
+│       ├── synth.toml       # Vivado target clock, parameter sets, expected primitive counts
+│       └── README.md        # algorithm (math), dataflow (mermaid), interface, synth results
 ├── rust/                    # one crate per kernel (rust/fir/, rust/nco/, ...)
-├── scripts/vivado/          # one synth.tcl and one report parser, called per block
+├── scripts/vivado/          # synth.tcl: non-project, out-of-context synth + place & route
 ├── examples/                # OTA demos with PLUTO
 ├── docs/
 └── build/                   # gitignored: sim and synth outputs
@@ -37,7 +38,7 @@ dsp-lib/
 In this way:
 - `uv sync`, `cargo build` and `just` all work from the repo root with no extra config. The Cargo workspace and `rust-toolchain.toml` pin Rust, and `uv` pins Python.
 - HDL tests live beside the HDL as the SV, `files.f`, cocotb test and `synth.toml` sit in one directory. The Python model stays in `dsplib` because the testbench, notebooks and `examples/` all reuse it.
-- One Vivado entry point as `just synth <block>` reads `hdl/<block>/synth.toml` and runs the shared Tcl, so every block has the same calling convention (also what Claude Code uses). Note Vivado is local only, CI runs the Verilator/cocotb, pytest and cargo jobs. `just synth` is a manual or self-hosted step.
+- One Vivado entry point as `just synth <block>` reads `hdl/<block>/synth.toml`, runs the shared Tcl once per parameter set and writes the results into the block's README, so every block has the same calling convention (also what Claude Code uses). Note Vivado is local only, CI runs the Verilator/cocotb, pytest and cargo jobs. `just synth` is a manual step, run when a block's HDL changes; `just synth-check` (no Vivado) catches READMEs whose results are older than the HDL.
 - Block discovery via `just test-hdl` globbing `hdl/*/files.f`, so adding a block needs no registration.
 
 ## Prerequisites
@@ -53,6 +54,11 @@ System tools, installed once per machine ([Vivado](https://www.amd.com/en/produc
 | [Verible](https://github.com/chipsalliance/verible) | SV lint/format | [release binaries](https://github.com/chipsalliance/verible/releases) | [release binaries](https://github.com/chipsalliance/verible/releases) |
 
 `just doctor` checks that these are on your `PATH`.
+
+> [!IMPORTANT]
+> `just synth` needs Vivado on your `PATH`. In each shell you run it from, first source the settings script from **your** install, e.g.
+> `source /tools/Xilinx/2025.1/Vivado/settings64.sh` (the path and version depend on where and what you installed).
+> Synthesis targets the ADALM PLUTO's Zynq-7010 (`xc7z010clg225-1`) and was developed with Vivado 2025.1. `just doctor` lists Vivado as optional.
 
 **NOTE:** Verilator calls `python3` while building cocotb sims, so always run simulations through `uv run` (or `just`) so the project's Python is first on `PATH`.
 
@@ -78,9 +84,31 @@ Each DSP block follows the pattern:
 - `hdl/<block>/test_<block>.py` holds the `@cocotb.test()` coroutines (not named `test_*`, so pytest skips them) and one pytest function that calls `dsplib.sim.run(block, parameters, tag)` per parameter set. Each set builds into `build/<block>/<tag>/`, and the cocotb tests read the parameters back with `sim.dut_params()`.
 - Testbenches compare DUT output bit-exactly against the model, check timing (latency, gaps), and check quality metrics (e.g. SFDR via `dsplib.spectral`) against limits from theory.
 - Call `dsplib.plot.save_capture(name, x, **meta)` *before* asserting, so a failing run still leaves something to plot. With `PLOT=1` the plots open after the sim, including on failure, though they never open when `CI` is set.
+- `hdl/<block>/synth.toml` lists the Vivado parameter sets and the primitives each should map to (see [Synthesis](#synthesis)).
+- `hdl/<block>/README.md` documents the block: the algorithm in GitHub math (`` $`...`$ `` inline, ```` ```math ```` blocks), a ```` ```mermaid ```` dataflow diagram, the parameter/port interface, what the tests check, and the intended FPGA mapping, followed by the generated synthesis results. [`hdl/nco/README.md`](hdl/nco/README.md) is the reference.
+
+## Synthesis
+
+Vivado checks that a block maps to the intended primitives (DSP48s fully pipelined, ROMs in BRAM with output registers, ...), how much of the PLUTO's Zynq-7010 it uses, and whether it closes timing. This is local only, and needs Vivado sourced (see [Prerequisites](#prerequisites)).
+
+```
+just synth <block>                  # every config in hdl/<block>/synth.toml; updates hdl/<block>/README.md
+just synth <block> --tag <tag>      # one config (README not updated)
+just synth <block> --synth-only     # skip place & route: faster, optimistic timing (README not updated)
+just synth-check                    # no Vivado: list blocks whose README results are older than their HDL
+```
+
+- For each `[[config]]`, [`scripts/vivado/synth.tcl`](scripts/vivado/synth.tcl) runs a non-project, out-of-context synth + place & route of `hdl/<block>/files.f` with that config's parameters into `build/<block>/synth/<tag>/`. That directory gets utilization/timing/DRC reports, `vivado.log`, a `result.json` and `post_route.dcp`; open the checkpoint with `vivado build/<block>/synth/<tag>/post_route.dcp` to inspect the netlist or placement.
+- [`dsplib.synth`](python/src/dsplib/synth.py) checks each result:
+  - every `expect` entry: an uppercase primitive (`DSP48E1 = 2`, `RAMB18E1 = 1`) or a utilization group (`lut`, `lutram`, `ff`, `bram`, `dsp`), given as an exact count or `{ min, max }`
+  - timing met at `period_ns`
+  - no critical warnings
+  - no DSP48 pipelining DRCs (`DPIP-1`, `DPOP-1`, `DPOP-2`)
+
+  By convention, hard primitives get exact counts and LUT/FF get a ceiling about 20% above the baseline, to absorb Vivado version drift.
+- When a full run passes, the generated section between the `synth:begin`/`synth:end` markers of the block README is rewritten: a resource and timing table per config, the hard-block configuration (e.g. BRAM `DOA_REG=1`), and the worst path. The marker records a hash of the block's sources and `synth.toml`; `just synth-check` compares it to the current files, so stale results are visible without Vivado.
 
 ## ToDo
 
-- [ ] Have Xilinx Vivado toolchain accessible/scriptable by Claude Code to verify synthesis, mapping (e.g. proper DSP48 inference) and resource utilization using a common calling convention per block.
 - [ ] Make sure blocks and algorithms from [rfproto](https://github.com/JohnnyGOX17/rfproto) and [hdl-lib](https://github.com/JohnnyGOX17/hdl-lib) are covered here
 - [ ] Show working demos Over The Air (OTA) with [ADI ADALM PLUTO SDR](https://github.com/JohnnyGOX17/PLUTO-SDR) using FPGA and SW kernels

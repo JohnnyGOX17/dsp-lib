@@ -221,3 +221,10 @@ __marimo__/
 
 # cocotb/Verilator
 sim_build/
+
+# Vivado (just synth runs inside build/; these catch manual runs from the repo root)
+.Xil/
+vivado*.jou
+vivado*.log
+vivado_pid*.str
+usage_statistics_webtalk.*

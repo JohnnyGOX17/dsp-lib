@@ -5,6 +5,7 @@ doctor:
     for t in just uv rustup cargo verilator verible-verilog-lint; do
         command -v $t >/dev/null || { echo "MISSING: $t"; rc=1; }
     done
+    command -v vivado >/dev/null || echo "optional: vivado not on PATH (only needed for just synth; source Vivado's settings64.sh)"
     exit $rc
 
 # Install project dependencies (Python env, Rust components)
@@ -34,3 +35,11 @@ test-hdl *args:
 # Replay a block's saved captures without re-simulating
 plot block:
     uv run python -m dsplib.plot build/{{ block }}
+
+# Vivado synth + place & route of one block vs hdl/<block>/synth.toml (local; source Vivado's settings64.sh first)
+synth block *args:
+    uv run python -m dsplib.synth {{ block }} {{ args }}
+
+# Check each block's README synthesis results match its current sources (no Vivado needed)
+synth-check:
+    uv run python -m dsplib.synth --check
